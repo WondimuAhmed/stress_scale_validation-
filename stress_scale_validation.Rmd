@@ -1,0 +1,946 @@
+---
+title: Validation of Perceived Stress Scale
+---
+<style type="text/css">
+   .main-container {max-width: 100%;}
+   .row {display: flex;}
+   .column {flex: 50%;}
+</style>
+
+<a id="top"></a>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, warning=FALSE, message=FALSE)
+```
+
+# **Project Overeview**
+
+[<span style="font-size: 25px;"> Here is the Source Code1 </span>](https://github.com/WondimuAhmed/stress_scale)
+
+The Perceived Stress Scale (PSS, 1) is a widely used tool for for assessing subjective stress. Despite its widespread application, empirical evidence regarding its psychometric properties within adolescent populations—particularly among Black youth—remains limited.  This study sought to fill that gap by evaluating the scale’s validity and reliability in this population. Specifically, it pursued three objectives: (1) to evaluate the applicability of the widely supported two-factor model(2,3) within a nationally representative sample of Black adolescents, (2) to examine its measurement invariance across gender, and (3) to assess its predictive validity by analyzing the relationship between perceived stress scores and lifetime prevalence of Major Depressive Disorder (MDD). 
+
+
+```{r,load_packages,  echo=FALSE, warning=FALSE, message=FALSE}
+if (!require("pacman")) install.packages("pacman");
+pacman::p_load(tidyverse, eRm, lavaan, semTools, semPlot, psych, naniar, haven, reshape2, lavaanPlot, scales, flextable, DT,plotly, scales)
+
+```
+
+# **Methods**
+
+## **Participants**
+
+This study used data from the [National Survey of American Life – Adolescent Supplement (NSAL-A)](https://www.icpsr.umich.edu/web/RCMD/studies/36380). The sample included 1,170 Black adolescents aged 13–17 (52% female) representing the broader population of Black teens in the U.S. 
+
+## **Measures**
+
+### **Perceived Stress Scale (PSS)**
+
+The study used the 14-item PSS from the NSAL-A, which included 8 positive and 6 negative items, with one item rephrased positively. Adolescents rated their perceived stress over the past month on a 5-point scale from 1 (never) to 5 (very often). To align with prior research, responses were recoded to a 0–4 scale.
+
+
+### **Major Depressive Disorder (MDD)**
+
+MDD was assessed using the World Mental Health Composite International Diagnostic Interview (CIDI) (4). 
+
+
+## **Statistical Analyses**
+
+### **Factor Structure** 
+
+Confirmatory Factor Analysis (CFA) was performed to assess the factor structure of the PSS. We evaluated both one-factor and correlated two-factor models for the 14-item and 10-item versions. Model fit was evaluated using established indices: CFI and TLI (values > 0.95 indicate good fit), RMSEA (< 0.05 indicates good fit), and SRMR (< 0.05 indicates good fit). 
+
+### **Measurement Invariance**
+
+The study tested whether the structure of the PSS worked the same way for both males and females. We checked: 
+
+- _Configural invariance_ (whether the scale measured stress similarly).
+- _Metric invariance_ (whether the questions were understood the same way).
+- _Scalar invariance_ (whether responses could be compared directly). 
+
+
+### **Predictive Validity**
+
+The study evaluated how well the PSS could identify adolescents with MDD using ROC curve analysis.
+
+# **Data Preparation**
+
+- Missing values coded as 8 and 9 in the database were replaced with NA to ensure accurate handling.
+- Positively worded items were reverse-scored for consistency with negatively worded items.
+- Descriptive statistics were calculated for key variables to detect anomaly.
+- Correlation matrix was visualized through a heatmap to examine correlation patterns. 
+- Missing data percentages were computed and visualized to identify variables with the most missing values. 
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+adol_stress_data<- read.csv("Adolsstressnew.csv")
+```
+
+```{r replace_codes_en_reverse_score_items,  echo=FALSE}
+# Replace codes 8 and 9 with NA 
+adol_stress_data <- adol_stress_data %>%
+  replace_with_na(replace = list(
+    PC4D = c(8, 9),
+    PC4E = c(8, 9),
+    PC4G = c(8, 9),
+    PC4H = c(8, 9),
+    PC4I = c(8, 9),
+    PC4J = c(8, 9),
+    PC4N = c(8, 9)
+  ))
+
+# Reverse scoring positively worded items
+
+adol_stress_data <- adol_stress_data %>%
+  mutate(
+    PC4B = 6 - PC4B,
+    PC4D = 6 - PC4D,
+    PC4E = 6 - PC4E,
+    PC4F = 6 - PC4F,
+    PC4G = 6 - PC4G,
+    PC4I = 6 - PC4I,
+    PC4J = 6 - PC4J,
+    PC4M = 6 - PC4M
+  )
+
+
+```
+
+
+```{r descriptive-stats-table, echo=FALSE}
+# Create a descriptive statistics table for the Perceived Stress Scale items and related variables.
+# This table includes the mean, standard deviation, median, minimum, and maximum values for each item.
+
+desc_table<- adol_stress_data[, c(4,20:33)]
+desc_table<- as.data.frame(describe(desc_table))%>% mutate(across(where(is.numeric), ~ round(., 2)))
+desc_table <- desc_table[,c(3:5,8,9)]
+
+# Rename columns for clarity in the output table
+ desc_table <- desc_table %>%
+  rename(
+    `Mean` = mean,
+    SD = sd,
+    Median = median,
+    `Min` = min,
+    Max = max)
+
+ # Display the formatted descriptive statistics table
+datatable(
+ desc_table,
+  options = list(dom = 't'),
+  caption = htmltools::tags$caption(
+    style = 'caption-side: top; text-align: left; font-weight: bold;',
+    'Table 1. Descriptive Statistics'
+  )
+)
+
+
+```
+
+
+
+
+```{r correlation-matrix-and-heat_map, echo=FALSE}
+
+# Compute the correlation matrix
+cor_matrix <- cor(adol_stress_data[, 20:33], use = "pairwise.complete.obs")
+
+
+cor_melted <- melt(cor_matrix)
+cor_melted <-as.data.frame(cor_melted )
+
+# Plot the heatmap
+corr_plot <- ggplot(data = cor_melted, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1), space = "Lab", 
+                       name = "Correlation") +
+                       theme_minimal() +
+                       theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+                       labs(title = "Figure 1. Heatmap of Correlations Among Perceived Stress Items",
+                       x = "Items", y = "Items")
+
+corr_plot 
+
+```
+
+
+
+
+```{r calculate-percentage-missing-and-plot, echo=FALSE}
+
+# Specify the 14 items
+items <- c("PC4A", "PC4B", "PC4C", "PC4D", "PC4E", "PC4F", "PC4G", 
+           "PC4H", "PC4I", "PC4J", "PC4K", "PC4L", "PC4M", "PC4N")
+
+# Calculate the percentage of missing values for each item
+missing_percentages <- adol_stress_data %>%
+  summarise(across(all_of(items), ~ mean(is.na(.)) * 100)) %>%
+  pivot_longer(cols = everything(), names_to = "Item", values_to = "Missing_Percentage")
+
+missing_percentages <- missing_percentages %>%
+  arrange(desc(Missing_Percentage))
+
+# Plot the missing percentages
+ggplot(missing_percentages, aes(x = reorder(Item, Missing_Percentage), y = Missing_Percentage, fill = Missing_Percentage)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_fill_gradient(low = "blue", high = "red") +
+  labs(
+    title = "Figure 2. Percentage of Missing Values for Perceived Stress Items",
+    x = "Items",
+    y = "Missing Percentage (%)"
+  ) + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +coord_flip()
+
+```
+
+
+
+# **Results**
+
+## **Factor Structure**
+
+The Tables below(Tables 2 and 3) summarizes the results of the goodness-of-fit tests for the one-factor and two-factor models of the PSS-14 and PSS-10. 
+
+
+```{r unidimensional-model-pss14,  echo=FALSE, warning=FALSE, message=FALSE}
+# Define the CFA model
+pss_cfa1 <- '
+  psg =~ PC4A + PC4C + PC4H + PC4K + PC4L + PC4N + 
+         PC4B + PC4D + PC4E + PC4F + PC4G + 
+         PC4I + PC4J + PC4M '
+
+pss_fit1 <- cfa(pss_cfa1, data = adol_stress_data, std.lv = TRUE, 
+              ordered = TRUE, mimic = c("MPlus"))
+
+# summary(pss_fit1, standardized = TRUE, fit.measures = TRUE, rsquare = TRUE) 
+
+
+#plots for model 1
+
+labels = list(psg = "Gneneral Percieved Stress") 
+
+p11 <- lavaanPlot(model = pss_fit1, labels = labels, graph_options = list(rankdir = "LR"), node_options = list(shape = "box", fontname = "Helvetica"), edge_options = list(color = "blue"), coefs = TRUE, covs = TRUE, stars = TRUE, digits = 2)
+
+
+ # Extract parameter estimates
+param_estimates <- parameterEstimates(pss_fit1, standardized = TRUE)
+
+# Filter for standardized loadings and plot
+std_loadings <- param_estimates %>%
+  filter(op == "=~") %>% 
+  dplyr::select(latent = lhs, indicator = rhs, std.loading = std.all)  
+
+p12 <- ggplot(std_loadings, aes(x = reorder(indicator, std.loading), y = std.loading, fill = latent)) +
+  geom_bar(stat = "identity", color = "black", width = .7) +
+  coord_flip() + 
+  labs(
+    title = "Standardized Loadings for Unidimesional CFA Model",
+    x = "Indicator",
+    y = "Standardized Loading"
+  ) +
+   scale_colour_viridis_d ()+  
+  theme_minimal() +scale_y_continuous(limits = c(-0.5, 1)) +
+  theme(
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5), legend.position = "none",
+  )
+
+```
+
+
+
+```{r, results='hide', fig.show='hide', echo=FALSE}
+p12
+```
+
+
+```{r results='hide', fig.show='hide',echo=FALSE}
+p11
+```
+
+```{r , two-factor-correlated-model-pss14, echo=FALSE, warning=FALSE, message=FALSE}
+
+# Define the second CFA model
+pss_cfa2 <- '
+  ps1 =~ PC4A + PC4C + PC4H + PC4K + PC4L + PC4N
+  ps2 =~ PC4B + PC4D + PC4E + PC4F + PC4G + PC4I + PC4J + PC4M '
+
+pss_fit2 <- cfa(pss_cfa2, data = adol_stress_data, std.lv = TRUE, 
+              ordered = TRUE, mimic = c("MPlus"))
+
+labels = list(ps1 = "Percieved Coping",ps2 = "Percieved Distress" ) 
+
+p21 <- lavaanPlot(model = pss_fit2, labels = labels, graph_options = list(rankdir = "LR"), node_options = list(shape = "box", fontname = "Helvetica"), edge_options = list(color = "blue"), coefs = TRUE, covs = TRUE, stars = TRUE, digits = 2)
+
+# Extract parameter estimates
+param_estimates2 <- parameterEstimates(pss_fit2, standardized = TRUE)
+
+# Filter for standardized loadings and plot
+std_loadings <- param_estimates2 %>%
+  filter(op == "=~") %>%   
+  dplyr::select(latent = lhs, indicator = rhs, std.loading = std.all)  
+
+p22 <- ggplot(std_loadings, aes(x = reorder(indicator, std.loading), y = std.loading, fill = latent)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7) +
+  coord_flip() +  
+  labs(
+    title = "Standardized Loadings for Two Factor CFA Model",
+    x = "Indicator",
+    y = "Standardized Loading"
+  ) +
+  scale_fill_viridis_d(option = "plasma")   +  
+  theme_minimal() + scale_y_continuous(limits = c(-.5, 1)) +  # Set y-axis limits to 0 and 
+  theme(
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5), legend.position = "none",
+  )
+```
+
+
+  
+```{r results='hide',fig.show='hide', echo=FALSE}
+p22
+
+```
+
+  
+``` {r results='hide', fig.show='hide', echo=FALSE}
+p21
+```
+
+```{r, two-factor-correlated-with-13-items, echo=FALSE, warning=FALSE, message=FALSE}
+
+# Define the revised CFA model
+
+pss_cfa2a <- '
+  ps1 =~ PC4A + PC4C + PC4H + PC4K + PC4N
+  ps2 =~ PC4B + PC4D + PC4E + PC4F + PC4G + PC4I + PC4J + PC4M '
+
+pss_fit2a <- cfa(pss_cfa2a, data = adol_stress_data, std.lv = TRUE, 
+               ordered = TRUE, mimic = c("MPlus"))
+
+labels = list(ps1 = "Percieved Coping",ps2 = "Percieved Distress" )
+
+p31 <- lavaanPlot(model = pss_fit2a, labels = labels, graph_options = list(rankdir = "LR"), node_options = list(shape = "box", fontname = "Helvetica"), edge_options = list(color = "blue"), coefs = TRUE, covs = TRUE, stars = TRUE, digits = 2)
+
+
+# Extract parameter estimates
+param_estimates2 <- parameterEstimates(pss_fit2a, standardized = TRUE)
+
+# Filter for standardized loadings and plot
+
+std_loadings <- param_estimates2 %>%
+  filter(op == "=~") %>%  
+  dplyr::select(latent = lhs, indicator = rhs, std.loading = std.all)  
+
+p32 <- ggplot(std_loadings, aes(x = reorder(indicator, std.loading), y = std.loading, fill = latent)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7) +
+  coord_flip() +  
+  labs(
+    title = "Standardized Loadings for Two Factor CFA Model",
+    x = "Indicator",
+    y = "Standardized Loading"
+  ) +
+  scale_fill_viridis_d(option = "plasma") +  
+  theme_minimal() + scale_y_continuous(limits = c(0, 1)) +
+  theme(
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5), legend.position = "none",
+  )
+```
+
+  
+```{r fig.show='hide', echo=FALSE}
+p32
+
+```
+
+
+  
+``` {r echo=FALSE}
+# htmltools::tagList(
+#   htmltools::tags$h4("Figure 3. Path Diagram of the Two-Factor Model (PSS-13)"),
+#   p31
+# )
+
+```
+
+
+
+
+```{r model-comparison-pss14,  echo=FALSE, warning=FALSE, message=FALSE}
+
+# Compare multiple CFA models using compareFit; compareFit is used to evaluate the relative fit of these models.
+
+myout.mod1_3 <- compareFit(One_factor_model_14itms=pss_fit1, Two_factor_model_14itms=pss_fit2, Two_factor_model_13itms=pss_fit2a, nested = FALSE)
+   
+model_fit_indices1 <- as.data.frame(myout.mod1_3@fit)
+model_fit_indices1  <- model_fit_indices1 [, c("cfi.robust", "tli.robust", "rmsea.robust", "srmr")] %>% mutate(across(where(is.numeric), ~ round(., 3)))
+model_fit_indices1 <- model_fit_indices1  %>%
+  rename(
+    "CFI" = "cfi.robust",
+    "TLI" = "tli.robust",
+    "RMSEA" = "rmsea.robust",
+    "SRMR" = "srmr") 
+
+rownames(model_fit_indices1 ) <- c("Two Factor Model-13 Items", "Two Factor Model-14 Items", "One Factor Model-14 Items")   
+
+ datatable(
+  model_fit_indices1,
+  options = list(dom = 't'),
+  caption = htmltools::tags$caption(
+    style = 'caption-side: top; text-align: left; font-weight: bold;',
+    'Table 2. Model Fit Indices for Competing CFA Models (PSS-14)'
+  )
+)
+
+
+
+```
+
+
+```{r,scoring-pss13, echo=FALSE}
+# Calculate scores for overall pss and subscales 
+
+adol_stress_data <- adol_stress_data %>%
+  mutate(
+    PC4BS = PC4B - 1,  
+    PC4DS = PC4D - 1, 
+    PC4ES = PC4E - 1,  
+    PC4FS = PC4F - 1, 
+    PC4GS = PC4G - 1,  
+    PC4IS = PC4I - 1,  
+    PC4JS = PC4J - 1,  
+    PC4MS = PC4M - 1,  
+
+    PC4AS = PC4A - 1,    
+    PC4CS = PC4C - 1,  
+    PC4HS = PC4H - 1,    
+    PC4KS = PC4K - 1,    
+    PC4NS = PC4N - 1    
+  )
+
+# Calculate subscale scores
+adol_stress_data <- adol_stress_data %>%
+  mutate(
+    # Perceived stress (negative) subscale
+    PSS13N = PC4AS + PC4CS + PC4HS + PC4KS + PC4NS,
+
+    # Perceived stress (positive) subscale
+    PSS13P = PC4BS + PC4DS + PC4ES + PC4FS + PC4GS + 
+             PC4IS + PC4JS + PC4MS,
+
+    # Total perceived stress score
+    PSS13Total = PSS13N + PSS13P
+  )
+
+```
+
+
+```{r unidimensional-model-pss10 , echo=FALSE, warning=FALSE, message=FALSE}
+# Define unidimensional CFA for pss-10
+
+pss_cfa1b <-'psg=~ PC4A  + PC4C + PC4H  + PC4K + PC4N+ PC4B + PC4F + PC4G  + PC4I  + PC4J'
+   
+pss_fit1b <- cfa(pss_cfa1b, data=adol_stress_data, std.lv=TRUE,ordered = TRUE, mimic =c("MPlus") )
+#summary(pss_fit1b,standardized=TRUE,fit.measures=TRUE, rsquare=TRUE)
+
+labels = list(psg = "Gneneral Percieved Stress") 
+
+p41 <- lavaanPlot(model = pss_fit1b, labels = labels, graph_options = list(rankdir = "LR"), node_options = list(shape = "box", fontname = "Helvetica"), edge_options = list(color = "blue"), coefs = TRUE, covs = TRUE, stars = TRUE, digits = 2)
+
+
+# Extract parameter estimates
+param_estimates <- parameterEstimates(pss_fit1b, standardized = TRUE)
+
+# Filter for standardized loadings and plot
+
+std_loadings <- param_estimates %>%
+  filter(op == "=~") %>%   # Select only factor loadings
+  dplyr::select(latent = lhs, indicator = rhs, std.loading = std.all)  
+
+p42 <- ggplot(std_loadings, aes(x = reorder(indicator, std.loading), y = std.loading, fill = latent)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7) +
+  coord_flip() +  
+  labs(
+    title = "Standardized Loadings for Unidimesional CFA Model",
+    x = "Indicator",
+    y = "Standardized Loading"
+  ) +
+  scale_colour_viridis_d () +  
+  theme_minimal() +scale_y_continuous(limits = c(0, 1)) +
+  theme(
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5), legend.position = "none",
+  )
+
+```
+
+
+  
+```{r fig.show='hide', echo=FALSE}
+p42
+```
+
+
+  
+```{r fig.show='hide', results='hide', echo=FALSE}
+p41
+```
+
+  
+
+```{r correlated-two-factor-pss10, echo=FALSE, warning=FALSE, message=FALSE}
+#Deffine the second model for pss10
+
+pss_cfa3b <-'ps1=~PC4A  + PC4C + PC4H  + PC4K + PC4N   
+          ps2=~ PC4B + PC4F + PC4G  + PC4I  + PC4J '
+
+pss_fit3b <- cfa(pss_cfa3b, data=adol_stress_data, std.lv=TRUE,ordered=TRUE, mimic =c("MPlus"))
+# summary(pss_fit3b,standardized=TRUE,fit.measures=TRUE, rsquare=TRUE)
+#lavInspect(pss_fit3b, "cor.lv")
+
+labels = list(ps1 = "Percieved Coping",ps2 = "Percieved Distress" ) 
+
+p51 <- lavaanPlot(model = pss_fit3b, labels = labels, graph_options = list(rankdir = "LR"), node_options = list(shape = "box", fontname = "Helvetica"), edge_options = list(color = "blue"), coefs = TRUE, covs = TRUE, stars = TRUE, digits = 2)
+
+
+# Extract parameter estimates
+param_estimates2 <- parameterEstimates(pss_fit3b, standardized = TRUE)
+
+# Filter for standardized loadings and plot
+
+std_loadings <- param_estimates2 %>%
+  filter(op == "=~") %>%   # Select only factor loadings
+  dplyr::select(latent = lhs, indicator = rhs, std.loading = std.all)  
+
+p52 <- ggplot(std_loadings, aes(x = reorder(indicator, std.loading), y = std.loading, fill = latent)) +
+  geom_bar(stat = "identity", color = "blue", width = 0.7) +
+  coord_flip() +  
+  labs(
+    title ="Standardized Loadings Two Factor PSS10 Model",
+    x = "Indicator",
+    y = "Standardized Loading"
+  ) +
+  scale_fill_viridis_d(option = "plasma") +  
+  theme_minimal() + scale_y_continuous(limits = c(0, 1)) +  # Set y-axis limits to 0 and 
+  theme(
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5), legend.position = "none",
+  )
+```
+
+
+  
+```{r fig.show='hide',echo=FALSE}
+p52
+
+```
+
+
+ 
+
+  
+```{r model-comparison-pss10, echo=FALSE, warning=FALSE, message=FALSE}
+
+ models_1en2 <- compareFit(One_factor_model_10itms=pss_fit1b, Two_factor_model_10itms=pss_fit3b, nested = FALSE)
+   #summary(models_1en2)
+  
+   
+model_fit_indices <- as.data.frame(models_1en2@fit)
+model_fit_indices  <- model_fit_indices [, c("cfi.robust", "tli.robust", "rmsea.robust", "srmr")] %>% mutate(across(where(is.numeric), ~ round(., 3)))
+
+model_fit_indices <- model_fit_indices  %>%
+  rename(
+    "CFI" = "cfi.robust",
+    "TLI" = "tli.robust",
+    "RMSEA" = "rmsea.robust",
+    "SRMR" = "srmr") 
+
+rownames(model_fit_indices ) <- c("Two Factor Model-10 Items", "One Factor Model-10 Items")   
+
+datatable(
+  model_fit_indices,
+  options = list(dom = 't'),
+  caption = htmltools::tags$caption(
+    style = 'caption-side: top; text-align: left; font-weight: bold;',
+    'Table 3. Model Fit Indices for Competing CFA Models (PSS-10)'
+  )
+)
+
+```
+
+The one-factor models for both versions showed poor fit, while the two-factor models fit the data significantly better. In the PSS-14, item 12 had a very low factor loading (.093) on the perceived distress factor and was removed, resulting in a revised PSS-13 model. Both the revised PSS-13 and the PSS-10 two-factor models demonstrated good fit, supporting the theory that stress consists of two dimensions: perceived coping and perceived distress (see Figures 3 & 4)
+
+  
+``` {r path-diagram-2-factor-pss13, echo=FALSE}
+htmltools::tagList(
+  htmltools::tags$h4("Figure 3. Path Diagram of the Two-Factor Model (PSS-13)"),
+  p31
+)
+
+```
+
+
+ 
+``` {r path-diagram-2-factor-pss10, echo=FALSE}
+htmltools::tagList(
+  htmltools::tags$h4("Figure 4. Path Diagram of the Two-Factor Model (PSS-10)"),
+  p51
+)
+
+```
+
+```{r, scoring_pss10, echo=FALSE, warning=FALSE, message=FALSE}
+
+# Scoring PSS10 
+adol_stress_data <- adol_stress_data %>%
+  mutate(
+    PSS10N = PC4AS + PC4CS + PC4HS + PC4KS + PC4NS,
+    PSS10P = PC4BS + PC4FS + PC4GS + PC4IS + PC4JS,
+    PSS10Total = PSS10N + PSS10P
+  )
+
+```
+
+
+## **Measurement Invariance**
+
+The study found that the structure of the Perceived Stress Scale (PSS) is consistent and works equally well for both males and females, ensuring fairness in its use ( See Tables 4 & 5). However, girls reported significantly higher stress levels than boys on both versions of the scale. This highlights the importance of understanding and addressing gender differences when evaluating and managing stress in adolescents.
+
+```{r gender_measurement_equivalence_pss13, echo=FALSE, warning=FALSE, message=FALSE}
+
+# Ensure gender is treated as a factor
+adol_stress_data$Gender <- as.factor(adol_stress_data$SEX)
+
+# Configural Model
+pss13_config <- cfa(
+  pss_cfa2a, 
+  data = adol_stress_data, 
+  group = "Gender", 
+  ordered = TRUE
+)
+
+#  Metric Invariance Model
+pss13_metric <- cfa(
+  pss_cfa2a, 
+  data = adol_stress_data, 
+  group = "Gender", 
+  ordered = TRUE, 
+  group.equal = "loadings"
+)
+
+# Scalar Invariance Model
+pss13_scalar <- cfa(
+  pss_cfa2a, 
+  data = adol_stress_data, 
+  group = "Gender", 
+  ordered = TRUE, 
+  group.equal = c("thresholds", "loadings")
+)
+
+
+# Model Comparison: Likelihood Ratio Test
+lrt_results <- lavTestLRT(
+  pss13_config, 
+  pss13_metric, 
+  pss13_scalar
+)
+
+
+
+# Model Comparison: Fit Indices
+fit_comparison <- compareFit(
+  pss13_config, 
+  pss13_metric, 
+  pss13_scalar
+)
+
+
+fit_comparison1 <- as.data.frame(fit_comparison@fit)
+fit_comparison1   <- fit_comparison1  [, c("cfi", "tli", "rmsea", "srmr")] %>% mutate(across(where(is.numeric), ~ round(., 3)))
+
+fit_comparison1  <- fit_comparison1  %>%
+  rename(
+    "CFI" = "cfi",
+    "TLI" = "tli",
+    "RMSEA" = "rmsea",
+    "SRMR" = "srmr") 
+
+rownames(fit_comparison1) <- c("Configural", "Metric", "Scalar") 
+
+#datatable(fit_comparison1,options = list(dom = 't'))
+
+datatable(
+  fit_comparison1,
+  options = list(dom = 't'),
+  caption = htmltools::tags$caption(
+    style = 'caption-side: top; text-align: left; font-weight: bold;',
+    'Table 4. Model Fit Indices for Configural, Metric, and Scalar Invariance Models (PSS-14)'
+  )
+)
+
+
+fit_diff1 <- as.data.frame(fit_comparison@fit.diff)
+fit_diff1    <- fit_diff1[, c("cfi", "tli", "rmsea", "srmr")] %>% mutate(across(where(is.numeric), ~ round(., 3)))
+
+fit_diff1 <- fit_diff1  %>%
+  rename(
+    "ΔCFI" = "cfi",
+    "ΔTLI" = "tli",
+    "ΔRMSEA" = "rmsea",
+    "ΔSRMR" = "srmr") 
+
+rownames(fit_diff1 ) <- c("Metric Vs.Configural", "Scalar Vs.Metric") 
+datatable(fit_diff1,options = list(dom = 't')) 
+
+
+```
+
+```{r gender_measurement_equivalence_pss10,  echo=FALSE, warning=FALSE, message=FALSE}
+
+
+# Configural
+pss10_config <- cfa(
+  model = pss_cfa3b, 
+  data = adol_stress_data, 
+  group = "Gender", 
+  ordered = TRUE
+)
+
+# Metric
+pss10_metric <- cfa(
+  model = pss_cfa3b, 
+  data = adol_stress_data, 
+  group = "Gender", 
+  ordered = TRUE, 
+  group.equal = "loadings"
+)
+
+# Scalar 
+pss10_scalar <- cfa(
+  model = pss_cfa3b, 
+  data = adol_stress_data, 
+  group = "Gender", 
+  ordered = TRUE, 
+  group.equal = c("thresholds", "loadings")
+)
+
+
+
+# Likelihood Ratio Test for Nested Models
+lrt_results <- lavTestLRT(
+  pss10_config, 
+  pss10_metric, 
+  pss10_scalar
+)
+#print(lrt_results)
+
+# Fit Index Comparison for Nested Models
+fit_comparison <- compareFit(
+  pss10_config, 
+  pss10_metric, 
+  pss10_scalar
+)
+#summary(fit_comparison)
+
+fit_comparison2 <- as.data.frame(fit_comparison@fit)
+fit_comparison2   <- fit_comparison2  [, c("cfi", "tli", "rmsea", "srmr")] %>% mutate(across(where(is.numeric), ~ round(., 3)))
+fit_comparison2  <- fit_comparison2  %>%
+  rename(
+    "CFI" = "cfi",
+    "TLI" = "tli",
+    "RMSEA" = "rmsea",
+    "SRMR" = "srmr") 
+
+rownames(fit_comparison2) <- c("Configural", "Metric", "Scalar") 
+
+
+datatable(
+  fit_comparison2,
+  options = list(dom = 't'),
+  caption = htmltools::tags$caption(
+    style = 'caption-side: top; text-align: left; font-weight: bold;',
+    'Table 5. Model Fit Indices for Configural, Metric, and Scalar Invariance Models (PSS-10)'
+  )
+)
+
+
+fit_diff2 <- as.data.frame(fit_comparison@fit.diff)
+fit_diff2    <- fit_diff2[, c("cfi", "tli", "rmsea", "srmr")] %>% mutate(across(where(is.numeric), ~ round(., 3)))
+
+fit_diff2 <- fit_diff2  %>%
+  rename(
+    "ΔCFI" = "cfi",
+    "ΔTLI" = "tli",
+    "ΔRMSEA" = "rmsea",
+    "ΔSRMR" = "srmr") 
+
+rownames(fit_diff2 ) <- c("Metric Vs.Configural", "Scalar Vs.Metric") 
+datatable(fit_diff2,options = list(dom = 't')) 
+
+
+
+```
+
+
+
+
+##  **Predictive Validity**
+
+
+The Perceived Stress Scale (PSS) showed moderate success in identifying teens at risk for depression(See Roc Curves below). Among the study group, 7.5% were diagnosed with depression, and the PSS-13 and PSS-10 versions both performed reasonably well in distinguishing these individuals. The "perceived distress" part of the scale was particularly effective, highlighting its importance in identifying teens who may need mental health support. This underscores the value of stress assessments in early detection and potential intervention for mental health challenges.
+
+```{r, create_roc_curve, echo=FALSE}
+# Create ROC curves
+adol_stress_data$DSM_MDD <- as.factor(adol_stress_data$DSM_MDD)
+
+adol_stress_data_d1 <- adol_stress_data[, c(3, 47:49)]
+adol_stress_data_d1 <- na.omit(adol_stress_data_d1)
+
+# Create basic ROC objects for Total, Negative, and Positive subscales
+rocobj1 <- pROC::roc(adol_stress_data_d1$DSM_MDD, adol_stress_data_d1$PSS13Total, print.auc = TRUE)
+rocobj2 <- pROC::roc(adol_stress_data_d1$DSM_MDD, adol_stress_data_d1$PSS13P)
+rocobj3 <- pROC::roc(adol_stress_data_d1$DSM_MDD, adol_stress_data_d1$PSS13N)
+
+# Combine ROC objects into a list
+roclist <- list(
+  "Total Score" = rocobj1,       
+  "Perceived Coping" = rocobj2,  
+  "Perceived Distress" = rocobj3 
+)
+
+g_roc1 <- pROC::ggroc(roclist, legacy.axes = TRUE) +
+  geom_abline(linetype = "dashed", color = "gray") + # Add a dashed diagonal line
+  geom_line(size = 1.5) +                           # Make ROC curves bold
+  theme_classic() +
+  ggtitle("Predictive Accuracy of PSS-13") +
+  labs(
+    x = "False Positive Rate",
+    y = "True Positive Rate",
+    linetype = "PSS-10"
+  ) +
+  theme(
+    text = element_text(size = 14, face = "bold"),  # Larger, bold font for all text
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Center and bold title
+    axis.title = element_text(size = 14, face = "bold"),  # Bold axis titles
+    axis.text = element_text(size = 12),  # Larger font size for axis ticks
+    legend.title = element_blank(),  # Bold legend title
+    legend.text = element_text(size = 12)
+  # Larger font for legend text
+  ) +
+  scale_color_manual(values = c("blue", "red", "green"))  # Custom colors for ROC curves
+
+# Save the plot
+roc_plot1 <- g_roc1
+
+
+adol_stress_data_d2 <- adol_stress_data[, c(3, 47:53)]
+adol_stress_data_d2 <- na.omit(adol_stress_data_d2)
+
+# Create a basic roc object
+rocobj1 <- pROC::roc(adol_stress_data_d2$DSM_MDD, adol_stress_data_d2$PSS10Total)
+rocobj2 <- pROC::roc(adol_stress_data_d2$DSM_MDD, adol_stress_data_d2$PSS10P)
+rocobj3 <- pROC::roc(adol_stress_data_d2$DSM_MDD, adol_stress_data_d2$PSS10N)
+roclist1 <- list("Total Score" = rocobj1,
+                "Perceived Coping" = rocobj2,
+                "Perceived Distress" = rocobj3)
+
+# Create the enhanced ROC plot
+g_roc2 <- pROC::ggroc(roclist1, legacy.axes = TRUE) +
+  geom_abline(linetype = "dashed", color = "gray") + # Add a dashed diagonal line
+  geom_line(size = 1.5) +                           # Make ROC curves bold
+  theme_classic() +
+  ggtitle("Predictive Accuracy of PSS-10") +
+  labs(
+    x = "False Positive Rate",
+    y = "True Positive Rate",
+    linetype = "PSS-10"
+  ) +
+  theme(
+    text = element_text(size = 14, face = "bold"),  # Larger, bold font for all text
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Center and bold title
+    axis.title = element_text(size = 14, face = "bold"),  # Bold axis titles
+    axis.text = element_text(size = 12),  # Larger font size for axis ticks
+    legend.title = element_blank(),  # Bold legend title
+    legend.text = element_text(size = 12)
+  # Larger font for legend text
+  ) +
+  scale_color_manual(values = c("blue", "red", "green"))  # Custom colors for ROC curves
+
+# Save the plot
+roc_plot2 <- g_roc2
+
+
+```
+
+<div class = "row">
+<div class = "column">
+    
+```{r echo=FALSE}
+ roc_plot1
+```
+</div>
+
+<div class = "column">
+```{r echo=FALSE}
+  roc_plot2
+```
+
+</div>
+</div>
+
+# **Impications** 
+ 
+These findings have important implications for both researchers and clinicians working with this population: 
+
+- Use of the PSS-13 (excluding item 12) is recommended for Black adolescent populations, as it offers better model fit and construct representation compared to the full scale.
+- Clinical screening efforts should prioritize the Perceived Distress subscale, which has greater relevance for identifying adolescents at risk for depression.
+- Researchers and clinicians should avoid relying solely on the total PSS score, as it may obscure important distinctions between distress and coping and fails to capture the multidimensional nature of perceived stress in this population.
+- The two-factor structure of the PSS underscores that perceived stress is not a unidimensional construct for Black adolescents; using a summed total score may lead to misinterpretation of their stress experiences.
+- The PSS demonstrates strong reliability and validity among Black adolescents, supporting its continued use in research and clinical assessments within this group.
+- Measurement invariance across gender supports equitable interpretation of the PSS-13 scores, making it an appropriate tool for use with both male and female Black adolescents.
+- These findings call for culturally responsive and psychometrically sound approaches to stress assessment, encouraging the use of validated subscales to guide intervention and deepen understanding of stress-related outcomes in Black youth.
+
+# **References**
+
+1. Cohen, S., Kamarch, T., & Mermelstein, R. (1983). A global measure of perceived stress. Journal of Health and Social Behavior, 24, 385–396.
+
+2. Hewitt, P. L., Flett, G. L., & Mosher, S. W. (1992). The perceived stress scale: Factor structure and relation to depression symptoms in a psychiatric sample. Journal of Psychopathology and Behavioral Assessment, 14(3), 247–257. https://doi.org/10.1007/BF00962631
+
+3. Roberti, J. W., Harrington, L. N., & Storch, E. A. (2006). Further psychometric support for the 10-item version of the perceived stress scale. Journal of College Counseling, 9(2), 135–147. https://doi.org/10.1002/j.2161-1882.2006.tb00100.x
+
+4. Wittchen, H. U. (1994). Reliability and validity studies of the WHO–Composite International Diagnostic Interview (CIDI): A critical review. Journal of Psychiatric Research, 28(1), 57–84. https://doi.org/10.1016/0022-3956(94)90036-1
+
+5. Arnett, J. J. (1999). Adolescent storm and stress, reconsidered. The American Psychologist, 54(5), 317–326. https://doi.org/10.1037//0003-066x.54.5.317
+
+
+
+
+<a href="#page-title" style="font-size: 20px; font-weight: bold; color: white; position: fixed; right: 20px; bottom: 20px; background-color: red; padding: 10px 15px; border-radius: 5px; box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2); text-decoration: none;">
+    Back to Top
+</a>
+
+
+
+<a href="https://wondimuahmed.github.io/Portfolio/" style="font-size: 20px; font-weight: bold; color:white; position: fixed; bottom: 20px; background-color: #007BFF; padding: 10px 15px; border-radius: 5px; box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2); text-decoration: none;">
+    Back to Portfolio
+</a>
+
+
